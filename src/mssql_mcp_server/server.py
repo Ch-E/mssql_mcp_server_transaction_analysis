@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-import pymssql
+import pyodbc
 from mcp.server import Server
 from mcp.types import Resource, Tool, TextContent
 from pydantic import AnyUrl
@@ -29,6 +29,10 @@ def get_db_config():
     
     return config
 
+def get_connection_string(config):
+    """Create a connection string for pyodbc."""
+    return f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config['server']};DATABASE={config['database']};UID={config['user']};PWD={config['password']}"
+
 # Initialize server
 app = Server("mssql_mcp_server")
 
@@ -37,7 +41,7 @@ async def list_resources() -> list[Resource]:
     """List SQL Server tables as resources."""
     config = get_db_config()
     try:
-        conn = pymssql.connect(**config)
+        conn = pyodbc.connect(get_connection_string(config))
         cursor = conn.cursor()
         # Query to get user tables from the current database
         cursor.execute("""
@@ -79,11 +83,11 @@ async def read_resource(uri: AnyUrl) -> str:
     table = parts[0]
     
     try:
-        conn = pymssql.connect(**config)
+        conn = pyodbc.connect(get_connection_string(config))
         cursor = conn.cursor()
         # Use TOP 100 for MSSQL (equivalent to LIMIT in MySQL)
         cursor.execute(f"SELECT TOP 100 * FROM {table}")
-        columns = [desc[0] for desc in cursor.description]
+        columns = [column[0] for column in cursor.description]
         rows = cursor.fetchall()
         result = [",".join(map(str, row)) for row in rows]
         cursor.close()
@@ -129,7 +133,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         raise ValueError("Query is required")
     
     try:
-        conn = pymssql.connect(**config)
+        conn = pyodbc.connect(get_connection_string(config))
         cursor = conn.cursor()
         cursor.execute(query)
         
@@ -144,7 +148,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         
         # Regular SELECT queries
         elif query.strip().upper().startswith("SELECT"):
-            columns = [desc[0] for desc in cursor.description]
+            columns = [column[0] for column in cursor.description]
             rows = cursor.fetchall()
             result = [",".join(map(str, row)) for row in rows]
             cursor.close()

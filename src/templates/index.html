@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSSQL MCP Server Web Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .loading {
+            display: none;
+        }
+        .loading.active {
+            display: block;
+        }
+        .error-message {
+            display: none;
+            color: red;
+            margin-top: 1rem;
+        }
+        .error-message.active {
+            display: block;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .tab-button {
+            padding: 0.75rem 1.5rem;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        .tab-button.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+        .tab-button:first-child {
+            border-top-left-radius: 0.5rem;
+            border-bottom-left-radius: 0.5rem;
+        }
+        .tab-button:last-child {
+            border-top-right-radius: 0.5rem;
+            border-bottom-right-radius: 0.5rem;
+        }
+        .tab-button:not(:last-child) {
+            border-right: none;
+        }
+        .switch-tab-button {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: #e5e7eb;
+            border-radius: 0.25rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+        }
+        .switch-tab-button:hover {
+            background: #d1d5db;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">MSSQL Database Interface</h1>
+        
+        <!-- Tables Panel -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Database Tables</h2>
+            <div class="mb-4">
+                <input type="text" id="tableSearch" placeholder="Search tables..." 
+                       class="w-full px-4 py-2 border rounded-lg">
+            </div>
+            <div class="relative">
+                <div id="tablesList" class="border rounded-lg p-4 min-h-[200px]">
+                    <div class="loading" id="tablesLoading">
+                        <div class="flex items-center justify-center">
+                            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                            <span class="ml-2">Loading tables...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Query Interface -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">Query Interface</h2>
+            
+            <!-- Tab Navigation -->
+            <div class="flex mb-4 border rounded-lg overflow-hidden relative">
+                <button class="tab-button active" data-tab="natural">Natural Language</button>
+                <button class="tab-button" data-tab="sql">SQL Query</button>
+                <button class="switch-tab-button" onclick="switchTab()">Switch to SQL</button>
+            </div>
+
+            <!-- Natural Language Tab -->
+            <div class="tab-content active" id="naturalTab">
+                <div class="mb-4">
+                    <textarea id="naturalQuery" 
+                              placeholder="Ask a question about your data in natural language (e.g., 'Show me all customers from New York' or 'What are the total sales by product category?')"
+                              class="w-full px-4 py-2 border rounded-lg h-32 focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                </div>
+                <button onclick="executeNaturalQuery()" 
+                        class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                    Ask Claude
+                </button>
+            </div>
+
+            <!-- SQL Query Tab -->
+            <div class="tab-content" id="sqlTab">
+                <div class="mb-4">
+                    <textarea id="sqlQuery" 
+                              placeholder="Enter your SQL query here..."
+                              class="w-full px-4 py-2 border rounded-lg h-32 focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                </div>
+                <button onclick="executeQuery()" 
+                        class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                    Execute Query
+                </button>
+            </div>
+
+            <!-- Generated SQL Display -->
+            <div id="generatedSql" class="mt-4 hidden">
+                <h3 class="text-lg font-semibold mb-2">Generated SQL Query:</h3>
+                <div class="bg-gray-100 p-4 rounded-lg">
+                    <pre id="sqlDisplay" class="whitespace-pre-wrap"></pre>
+                </div>
+            </div>
+
+            <!-- Analysis Results -->
+            <div id="analysisResults" class="mt-4 hidden">
+                <h3 class="text-lg font-semibold mb-2">Analysis:</h3>
+                <div class="bg-gray-100 p-4 rounded-lg">
+                    <div id="analysisDisplay"></div>
+                </div>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div class="loading mt-4" id="queryLoading">
+                <div class="flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                    <span class="ml-2">Processing your query...</span>
+                </div>
+            </div>
+
+            <!-- Error Message -->
+            <div class="error-message" id="queryError"></div>
+
+            <!-- Results Table -->
+            <div id="results" class="mt-8">
+                <h3 class="text-lg font-semibold mb-4">Query Results</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white border">
+                        <thead id="resultsHeader" class="bg-gray-100">
+                        </thead>
+                        <tbody id="resultsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab switching functionality
+        function switchTab() {
+            const currentTab = document.querySelector('.tab-button.active');
+            const currentTabId = currentTab.getAttribute('data-tab');
+            const newTabId = currentTabId === 'natural' ? 'sql' : 'natural';
+            
+            // Update button text
+            const switchButton = document.querySelector('.switch-tab-button');
+            switchButton.textContent = `Switch to ${currentTabId === 'natural' ? 'Natural Language' : 'SQL'}`;
+            
+            // Switch tabs
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`[data-tab="${newTabId}"]`).classList.add('active');
+            document.getElementById(`${newTabId}Tab`).classList.add('active');
+        }
+
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                // Remove active class from all buttons and contents
+                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                
+                // Add active class to clicked button and corresponding content
+                button.classList.add('active');
+                const tabId = button.getAttribute('data-tab') + 'Tab';
+                document.getElementById(tabId).classList.add('active');
+                
+                // Update switch button text
+                const switchButton = document.querySelector('.switch-tab-button');
+                switchButton.textContent = `Switch to ${button.getAttribute('data-tab') === 'natural' ? 'SQL' : 'Natural Language'}`;
+            });
+        });
+
+        // Load tables when page loads
+        document.addEventListener('DOMContentLoaded', loadTables);
+
+        // Table search functionality
+        document.getElementById('tableSearch').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const tables = document.querySelectorAll('#tablesList .table-item');
+            
+            tables.forEach(table => {
+                const tableName = table.textContent.toLowerCase();
+                if (tableName.includes(searchTerm)) {
+                    table.style.display = 'block';
+                } else {
+                    table.style.display = 'none';
+                }
+            });
+        });
+
+        async function loadTables() {
+            const tablesList = document.getElementById('tablesList');
+            const loading = document.getElementById('tablesLoading');
+            
+            loading.classList.add('active');
+            tablesList.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/tables');
+                const tables = await response.json();
+                
+                tables.forEach(table => {
+                    const div = document.createElement('div');
+                    div.className = 'table-item p-2 hover:bg-gray-100 cursor-pointer';
+                    div.textContent = table;
+                    div.onclick = () => loadTableData(table);
+                    tablesList.appendChild(div);
+                });
+            } catch (error) {
+                console.error('Error loading tables:', error);
+                tablesList.innerHTML = '<div class="text-red-500">Error loading tables</div>';
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        async function loadTableData(tableName) {
+            const resultsHeader = document.getElementById('resultsHeader');
+            const resultsBody = document.getElementById('resultsBody');
+            const loading = document.getElementById('queryLoading');
+            
+            loading.classList.add('active');
+            
+            try {
+                const response = await fetch(`/api/tables/${tableName}`);
+                const data = await response.json();
+                
+                // Clear previous results
+                resultsHeader.innerHTML = '';
+                resultsBody.innerHTML = '';
+                
+                // Create header
+                const headerRow = document.createElement('tr');
+                Object.keys(data[0]).forEach(key => {
+                    const th = document.createElement('th');
+                    th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+                    th.textContent = key;
+                    headerRow.appendChild(th);
+                });
+                resultsHeader.appendChild(headerRow);
+                
+                // Create rows
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-gray-50';
+                    Object.values(row).forEach(value => {
+                        const td = document.createElement('td');
+                        td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+                        td.textContent = value;
+                        tr.appendChild(td);
+                    });
+                    resultsBody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error('Error loading table data:', error);
+                resultsBody.innerHTML = '<tr><td colspan="100" class="text-red-500 p-4">Error loading table data</td></tr>';
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        async function executeNaturalQuery() {
+            const queryInput = document.getElementById('naturalQuery');
+            const query = queryInput.value.trim();
+            
+            if (!query) {
+                showError('Please enter a question');
+                return;
+            }
+            
+            // Show loading state
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Processing your question...</div>';
+            
+            try {
+                const response = await fetch('/api/natural-query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to execute query');
+                }
+                
+                const data = await response.json();
+                
+                // Display the generated SQL query
+                const sqlQueryDiv = document.getElementById('generatedSql');
+                sqlQueryDiv.textContent = data.sql_query;
+                sqlQueryDiv.style.display = 'block';
+                
+                // Display the analysis
+                const analysisDiv = document.getElementById('analysisResults');
+                analysisDiv.textContent = data.analysis;
+                analysisDiv.style.display = 'block';
+                
+                // Display the results in a table
+                if (data.results && data.results.length > 0) {
+                    const table = document.createElement('table');
+                    table.className = 'results-table';
+                    
+                    // Create header row
+                    const thead = document.createElement('thead');
+                    const headerRow = document.createElement('tr');
+                    Object.keys(data.results[0]).forEach(key => {
+                        const th = document.createElement('th');
+                        th.textContent = key;
+                        headerRow.appendChild(th);
+                    });
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
+                    
+                    // Create body rows
+                    const tbody = document.createElement('tbody');
+                    data.results.forEach(row => {
+                        const tr = document.createElement('tr');
+                        Object.values(row).forEach(value => {
+                            const td = document.createElement('td');
+                            td.textContent = value;
+                            tr.appendChild(td);
+                        });
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    
+                    resultsDiv.innerHTML = '';
+                    resultsDiv.appendChild(table);
+                } else {
+                    resultsDiv.innerHTML = '<div class="no-results">No results found</div>';
+                }
+                
+            } catch (error) {
+                showError(error.message);
+                resultsDiv.innerHTML = '';
+            }
+        }
+
+        async function executeQuery() {
+            const query = document.getElementById('sqlQuery').value.trim();
+            if (!query) return;
+
+            const loading = document.getElementById('queryLoading');
+            const error = document.getElementById('queryError');
+            const resultsHeader = document.getElementById('resultsHeader');
+            const resultsBody = document.getElementById('resultsBody');
+
+            loading.classList.add('active');
+            error.classList.remove('active');
+
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query }),
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Clear previous results
+                resultsHeader.innerHTML = '';
+                resultsBody.innerHTML = '';
+
+                // Create header
+                const headerRow = document.createElement('tr');
+                Object.keys(data[0]).forEach(key => {
+                    const th = document.createElement('th');
+                    th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+                    th.textContent = key;
+                    headerRow.appendChild(th);
+                });
+                resultsHeader.appendChild(headerRow);
+
+                // Create rows
+                data.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-gray-50';
+                    Object.values(row).forEach(value => {
+                        const td = document.createElement('td');
+                        td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
+                        td.textContent = value;
+                        tr.appendChild(td);
+                    });
+                    resultsBody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error('Error executing query:', error);
+                error.textContent = error.message;
+                error.classList.add('active');
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            
+            // Hide error after 5 seconds
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Add error message div to the HTML if it doesn't exist
+        const errorDiv = document.createElement('div');
+        errorDiv.id = 'errorMessage';
+        errorDiv.style.display = 'none';
+        errorDiv.style.color = 'red';
+        errorDiv.style.margin = '10px 0';
+        document.querySelector('.container').prepend(errorDiv);
+    </script>
+</body>
+</html> 

@@ -1,18 +1,24 @@
 # tests/conftest.py
 import pytest
 import os
-import pymssql
+import pyodbc
+
+def get_connection_string(config):
+    """Create a connection string for pyodbc."""
+    return f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={config['server']};DATABASE={config['database']};UID={config['user']};PWD={config['password']}"
 
 @pytest.fixture(scope="session")
 def mssql_connection():
     """Create a test database connection."""
     try:
-        connection = pymssql.connect(
-            server=os.getenv("MSSQL_SERVER", "localhost"),
-            user=os.getenv("MSSQL_USER", "sa"),
-            password=os.getenv("MSSQL_PASSWORD", "testpassword"),
-            database=os.getenv("MSSQL_DATABASE", "test_db")
-        )
+        config = {
+            "server": os.getenv("MSSQL_SERVER", "localhost"),
+            "user": os.getenv("MSSQL_USER", "sa"),
+            "password": os.getenv("MSSQL_PASSWORD", "testpassword"),
+            "database": os.getenv("MSSQL_DATABASE", "test_db")
+        }
+        
+        connection = pyodbc.connect(get_connection_string(config))
         
         # Create a test table
         cursor = connection.cursor()
@@ -34,7 +40,7 @@ def mssql_connection():
         cursor.close()
         connection.close()
             
-    except pymssql.Error as e:
+    except pyodbc.Error as e:
         pytest.fail(f"Failed to connect to SQL Server: {e}")
 
 @pytest.fixture(scope="session")

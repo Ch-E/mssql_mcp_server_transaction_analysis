@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transaction Analysis</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        .chat-container {
+            height: calc(100vh - 200px);
+            overflow-y: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            background-color: #f8f9fa;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .user-message {
+            background-color: #ffffff;
+            margin-left: 20%;
+            border-left: 4px solid #007bff;
+        }
+        .assistant-message {
+            background-color: #ffffff;
+            margin-right: 20%;
+            border-left: 4px solid #28a745;
+        }
+        .table-container {
+            overflow-x: auto;
+            margin: 10px 0;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .chart-container {
+            width: 100%;
+            height: 400px;
+            margin: 10px 0;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .explanation {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,.1);
+            border-radius: 50%;
+            border-top-color: #000;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .sql-query {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="my-4">Transaction Analysis</h1>
+        
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant-message">
+                Hello! I'm your Transaction Analysis assistant. I can help you analyze your database transactions and answer questions about your data. How can I help you today?
+            </div>
+        </div>
+
+        <div class="input-group mb-3">
+            <input type="text" id="messageInput" class="form-control" placeholder="Type your message here...">
+            <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chatContainer');
+        const messageInput = document.getElementById('messageInput');
+
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'assistant-message'}`;
+            messageDiv.innerHTML = content;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function addLoadingIndicator() {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'message assistant-message';
+            loadingDiv.innerHTML = '<div class="loading"></div>';
+            chatContainer.appendChild(loadingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return loadingDiv;
+        }
+
+        function formatData(data) {
+            let content = '';
+            
+            if (data.explanation) {
+                content += `<div class="explanation">${data.explanation}</div>`;
+            }
+
+            if (data.type === 'table') {
+                content += `
+                    <div class="table-container">
+                        ${data.content}
+                    </div>
+                    <div class="mt-2">Total rows: ${data.row_count}</div>
+                `;
+            }
+            if (data.type === 'chart') {
+                const containerId = 'chart-' + Math.random().toString(36).substr(2, 9);
+                content += `<div class="chart-container" id="${containerId}"></div>`;
+                setTimeout(() => {
+                    const chartData = JSON.parse(data.content);
+                    Plotly.newPlot(containerId, chartData.data, chartData.layout);
+                }, 100);
+            }
+            return content;
+        }
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+
+            // Add user message
+            addMessage(message, true);
+            messageInput.value = '';
+
+            // Add loading indicator
+            const loadingDiv = addLoadingIndicator();
+
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Remove loading indicator
+                chatContainer.removeChild(loadingDiv);
+
+                if (data.type === 'error') {
+                    addMessage(`<div class="alert alert-danger">${data.content}</div>`);
+                    return;
+                }
+
+                if (data.type === 'text') {
+                    addMessage(data.content);
+                    return;
+                }
+
+                if (data.type === 'table' || data.type === 'chart') {
+                    addMessage(formatData(data));
+                    return;
+                }
+
+                if (data.type === 'combined') {
+                    addMessage(`
+                        <div class="explanation">${data.explanation}</div>
+                        ${formatData(data.data)}
+                    `);
+                    return;
+                }
+            })
+            .catch(error => {
+                // Remove loading indicator
+                chatContainer.removeChild(loadingDiv);
+                addMessage(`<div class="alert alert-danger">Error: ${error.message}</div>`);
+            });
+        }
+
+        // Allow sending message with Enter key
+        messageInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html> 

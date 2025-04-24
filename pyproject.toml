@@ -6,13 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp>=1.0.0",
-    "pymssql>=2.2.8",
+    "pyodbc>=5.0.1",
 ]
-
-[tool.mcp]
-system_dependencies.darwin = ["freetds"]
-system_dependencies.linux = ["freetds-dev"]
-system_dependencies.win32 = []
 
 [build-system]
 requires = ["hatchling"]
